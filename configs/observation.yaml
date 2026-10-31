@@ -1,0 +1,49 @@
+feature_order:
+  - speed
+  - lane_offset
+  - heading_error
+  - left_boundary_distance
+  - right_boundary_distance
+  - front_obstacle_distance
+  - road_curvature
+  - previous_steering
+
+output_dtype: float32
+feature_ranges:
+  speed: [0.0, 1.0]
+  lane_offset: [-1.0, 1.0]
+  heading_error: [-1.0, 1.0]
+  left_boundary_distance: [0.0, 1.0]
+  right_boundary_distance: [0.0, 1.0]
+  front_obstacle_distance: [0.0, 1.0]
+  road_curvature: [-1.0, 1.0]
+  previous_steering: [-1.0, 1.0]
+
+normalization:
+  # MetaDrive vehicle.speed is in m/s; values at or above the scale saturate at 1.
+  speed_max_m_s: 40.0
+  # MetaDrive dist_to_left_side / dist_to_right_side are in meters.
+  boundary_distance_max_m: 10.0
+  # Forward sensor range; no detected obstacle maps to 1.0 (clear through range).
+  obstacle_distance_max_m: 50.0
+  # Tangent heading change divided by lookahead meters gives signed curvature (1/m).
+  curvature_lookahead_m: 10.0
+  curvature_max_per_m: 0.1
+
+# Source, units, physical bounds and missing-value behavior:
+# speed: vehicle.speed (m/s), physically >= 0 and bounded by vehicle.max_speed_m_s;
+#   divide by speed_max_m_s, clip to [0, 1]. Missing/non-finite -> 0.
+# lane_offset: current lane.local_coordinates(vehicle.position)[1] (m), normalized
+#   by half lane.width_at(longitudinal), clip to [-1, 1]. Missing lane -> 0.
+# heading_error: vehicle.heading_theta - lane.heading_theta_at(longitudinal) (rad),
+#   wrapped to [-pi, pi] then divide by pi. Missing lane/heading -> 0.
+# left/right boundary: vehicle.dist_to_left_side / dist_to_right_side (m); distances
+#   are >= 0, with practical upper bound boundary_distance_max_m; scale and clip
+#   to [0, 1]. Missing/non-finite -> 0 (conservative: no known clearance).
+# front obstacle: nearest positive forward bumper-to-bumper gap from vehicle.lidar
+#   detections (m), bounded by obstacle_distance_max_m; scale and clip to [0, 1].
+#   No obstacle inside sensor range -> 1; unavailable lidar -> 0 (unknown is not clear).
+# road_curvature: wrapped lane tangent change over curvature_lookahead_m (rad/m),
+#   divided by curvature_max_per_m and clipped to [-1, 1]. Missing lane -> 0.
+# previous_steering: first action component applied on the preceding step, originally
+#   normalized by MetaDrive's action space to [-1, 1]; clipped to that range. At reset -> 0.
