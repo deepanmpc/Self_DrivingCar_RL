@@ -1,0 +1,21 @@
+use_render: false
+log_level: 50
+
+simulation:
+  num_scenarios: 1
+  start_seed: 0
+  horizon: 1000
+
+road:
+  map: 3
+  random_lane_width: false
+  random_lane_num: false
+  lane_width: 3.5
+  lane_num: 3
+
+vehicle:
+  show_navi_mark: false
+  show_dest_mark: false
+
+traffic:
+  density: 0.0

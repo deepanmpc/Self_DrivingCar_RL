@@ -58,14 +58,18 @@ class EightInputObservation:
         lane_offset = 0.0
         heading_error = 0.0
         curvature = 0.0
+        
         if lane is not None:
+            
             longitudinal, lateral = lane.local_coordinates(vehicle.position)
             half_width = lane.width_at(longitudinal) / 2.0
+            
             if math.isfinite(half_width) and half_width > 0 and math.isfinite(lateral):
                 lane_offset = float(np.clip(lateral / half_width, -1.0, 1.0))
 
             lane_heading = lane.heading_theta_at(longitudinal)
             vehicle_heading = getattr(vehicle, "heading_theta", None)
+            
             if self._is_finite(vehicle_heading) and math.isfinite(lane_heading):
                 heading_error = self._wrap_to_pi(float(vehicle_heading) - lane_heading) / math.pi
 
@@ -134,6 +138,7 @@ class EightInputObservation:
         return getattr(navigation, "current_lane", None)
 
     def _front_obstacle_distance(self, vehicle) -> Optional[float]:
+        # Read the lidar object attached to the vehicle; use None if it has no lidar attribute.
         lidar = getattr(vehicle, "lidar", None)
         if lidar is None:
             return None

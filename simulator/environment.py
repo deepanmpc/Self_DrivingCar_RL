@@ -1,62 +1,95 @@
+from copy import deepcopy
 from pathlib import Path
-import numpy as np
+
 import yaml
 from metadrive.envs.metadrive_env import MetaDriveEnv
+
+from simulator.action_adapter import ContinuousActionAdapter
 from simulator.observation_adapter import EightInputObservation
 
 
 class DrivingEnvironment:
-
     def __init__(self, render=False):
+        config_directory = Path(__file__).resolve().parents[1] / "configs"
+        environment_config = self._load_yaml(config_directory / "environment.yaml")
+        observation_config = self._load_yaml(config_directory / "observation.yaml")
+        if not isinstance(observation_config.get("normalization"), dict):
+            raise ValueError("Observation configuration must define a normalization mapping.")
 
-        config = {
-            "use_render": render,
-            "num_scenarios": 1,
-            "start_seed": 0,
-            "traffic_density": 0.0,
-            "log_level": 50,
-        }
-
-        self.env = MetaDriveEnv(config=config)
-        observation_config_path = Path(__file__).resolve().parents[1] / "configs" / "observation.yaml"
-        with observation_config_path.open(encoding="utf-8") as config_file:
-            observation_config = yaml.safe_load(config_file)
-        if not isinstance(observation_config, dict) or not isinstance(
-            observation_config.get("normalization"), dict
-        ):
-            raise ValueError(f"Invalid observation configuration: {observation_config_path}")
+        self._env = MetaDriveEnv(config=self._build_metadrive_config(environment_config, render))
         self.observation_adapter = EightInputObservation(**observation_config["normalization"])
+        self.action_adapter = ContinuousActionAdapter()
         self._vehicle = None
-        self._previous_steering = 0.0
+        self._raw_observation = None
 
     def reset(self, seed=None):
-
-        _, info = self.env.reset(seed=seed)
-        self._vehicle = self.env.agent
-        self._previous_steering = 0.0
+        self._raw_observation, info = self._env.reset(seed=seed)
+        self._vehicle = self._env.agent
+        self.action_adapter.reset()
         observation = self.observation_adapter.observe(self._vehicle)
-
         return observation, info
 
     def step(self, action):
-
-        steering = self._get_steering(action)
-        _, reward, terminated, truncated, info = (
-            self.env.step(action)
-        )
-        self._previous_steering = steering
+        adapted_action = self.action_adapter.adapt(action)
+        self._raw_observation, reward, terminated, truncated, info = self._env.step(adapted_action)
         observation = self.observation_adapter.observe(
-            self._vehicle, previous_steering=self._previous_steering
+            self._vehicle, previous_steering=self.action_adapter.previous_steering
         )
-
         return observation, reward, terminated, truncated, info
 
     @staticmethod
-    def _get_steering(action):
-        action_values = np.asarray(action, dtype=float).reshape(-1)
-        if action_values.size == 0 or not np.isfinite(action_values[0]):
-            raise ValueError("Action must contain a finite steering value.")
-        return float(np.clip(action_values[0], -1.0, 1.0))
+    def _load_yaml(path):
+        with path.open(encoding="utf-8") as config_file:
+            config = yaml.safe_load(config_file)
+        if not isinstance(config, dict):
+            raise ValueError(f"Configuration must contain a YAML mapping: {path}")
+        return config
+
+    @staticmethod
+    def _build_metadrive_config(environment_config, render):
+        simulation = environment_config.get("simulation", {})
+        road = environment_config.get("road", {})
+        vehicle = environment_config.get("vehicle", {})
+        traffic = environment_config.get("traffic", {})
+        for section_name, section in (
+            ("simulation", simulation),
+            ("road", road),
+            ("vehicle", vehicle),
+            ("traffic", traffic),
+        ):
+            if not isinstance(section, dict):
+                raise ValueError(f"Environment configuration section '{section_name}' must be a mapping.")
+
+        return {
+            "use_render": bool(render),
+            "log_level": environment_config.get("log_level", 50),
+            **simulation,
+            "map": road.get("map", 3),
+            "random_lane_width": road.get("random_lane_width", False),
+            "random_lane_num": road.get("random_lane_num", False),
+            "map_config": {
+                "lane_width": road.get("lane_width", 3.5),
+                "lane_num": road.get("lane_num", 3),
+            },
+            "vehicle_config": vehicle,
+            "traffic_density": traffic.get("density", 0.0),
+        }
+
+    @property
+    def vehicle(self):
+        if self._vehicle is None:
+            raise RuntimeError("Call reset() before accessing the active vehicle.")
+        return self._vehicle
+
+    @property
+    def raw_observation(self):
+        if self._raw_observation is None:
+            raise RuntimeError("Call reset() before accessing the raw MetaDrive observation.")
+        return deepcopy(self._raw_observation)
+
+    @property
+    def navigation(self):
+        return self.vehicle.navigation
 
     @property
     def observation_space(self):
@@ -64,8 +97,7 @@ class DrivingEnvironment:
 
     @property
     def action_space(self):
-        return self.env.action_space
+        return self._env.action_space
 
     def close(self):
-
-        self.env.close()
+        self._env.close()
