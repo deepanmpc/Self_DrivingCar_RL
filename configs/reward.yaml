@@ -1,0 +1,16 @@
+progress_weight: 1.0
+max_progress_m_per_step: 2.0
+
+# A small centering bonus encourages lane keeping without outweighing progress.
+lane_weight: 0.1
+
+# Speed reward saturates at target_speed_m_s; higher speed earns no extra reward.
+speed_weight: 0.15
+target_speed_m_s: 15.0
+
+collision_penalty: 5.0
+offroad_penalty: 3.0
+
+steering_penalty_weight: 0.05
+steering_deadband: 0.25
+smoothness_penalty_weight: 0.1
