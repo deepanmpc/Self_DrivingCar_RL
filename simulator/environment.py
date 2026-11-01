@@ -6,6 +6,7 @@ from metadrive.envs.metadrive_env import MetaDriveEnv
 
 from simulator.action_adapter import ContinuousActionAdapter
 from simulator.observation_adapter import EightInputObservation
+from simulator.reward_function import DrivingReward
 
 
 class DrivingEnvironment:
@@ -13,12 +14,14 @@ class DrivingEnvironment:
         config_directory = Path(__file__).resolve().parents[1] / "configs"
         environment_config = self._load_yaml(config_directory / "environment.yaml")
         observation_config = self._load_yaml(config_directory / "observation.yaml")
+        reward_config = self._load_yaml(config_directory / "reward.yaml")
         if not isinstance(observation_config.get("normalization"), dict):
             raise ValueError("Observation configuration must define a normalization mapping.")
 
         self._env = MetaDriveEnv(config=self._build_metadrive_config(environment_config, render))
         self.observation_adapter = EightInputObservation(**observation_config["normalization"])
         self.action_adapter = ContinuousActionAdapter()
+        self.reward_function = DrivingReward(reward_config)
         self._vehicle = None
         self._raw_observation = None
 
@@ -26,12 +29,18 @@ class DrivingEnvironment:
         self._raw_observation, info = self._env.reset(seed=seed)
         self._vehicle = self._env.agent
         self.action_adapter.reset()
+        self.reward_function.reset()
         observation = self.observation_adapter.observe(self._vehicle)
         return observation, info
 
     def step(self, action):
         adapted_action = self.action_adapter.adapt(action)
-        self._raw_observation, reward, terminated, truncated, info = self._env.step(adapted_action)
+        self._raw_observation, metadrive_reward, terminated, truncated, info = self._env.step(adapted_action)
+        reward, reward_components = self.reward_function.calculate(
+            self._vehicle, steering=self.action_adapter.previous_steering
+        )
+        info["metadrive_reward"] = float(metadrive_reward)
+        info["reward_components"] = reward_components
         observation = self.observation_adapter.observe(
             self._vehicle, previous_steering=self.action_adapter.previous_steering
         )

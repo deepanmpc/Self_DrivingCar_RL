@@ -12,5 +12,7 @@ collision_penalty: 5.0
 offroad_penalty: 3.0
 
 steering_penalty_weight: 0.05
-steering_deadband: 0.25
+steering_deadband: 0.25 
+# A small smoothness penalty encourages smooth driving without outweighing progress., 
+#it does not calculate penalty or reward for small steering changes within 0.25 range
 smoothness_penalty_weight: 0.1
