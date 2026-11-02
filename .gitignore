@@ -3,3 +3,5 @@ checkpoints/
 .DS_Store
 __pycache__/
 agent.md
+visualizer/models/*.json
+.netsmith/

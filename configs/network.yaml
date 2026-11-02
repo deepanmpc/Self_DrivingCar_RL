@@ -1,0 +1,19 @@
+actor:
+  observation_dim: 8
+  action_dim: 2
+  hidden_dims: [256, 256, 256, 128, 128, 128, 64]
+  activation: relu
+  layer_norm: false
+  initial_log_std: -0.5
+  min_log_std: -5.0
+  max_log_std: 2.0
+
+critic:
+  observation_dim: 8
+  hidden_dims: [256, 128, 64]
+  activation: relu
+  layer_norm: false
+  output_gain: 1.0
+
+# Output actions are tanh-squashed to (-1, 1). The log probability includes
+# the tanh change-of-variables correction.
