@@ -10,7 +10,7 @@ actor:
 
 critic:
   observation_dim: 8
-  hidden_dims: [256, 128, 64]
+  hidden_dims: [256, 256, 256, 128, 128, 128, 64]
   activation: relu
   layer_norm: false
   output_gain: 1.0
