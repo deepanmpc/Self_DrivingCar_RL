@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driving Network Visualizer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">RL</div>
+        <div>
+          <h1>Driving Network Visualizer</h1>
+          <p>Actor and critic activations · MetaDrive PPO</p>
+        </div>
+      </div>
+      <nav class="mode-tabs" id="modeTabs" aria-label="Visualizer mode">
+        <button class="mode-tab active" data-mode="explore" type="button">Explore</button>
+        <button class="mode-tab" data-mode="live" id="liveTab" type="button" disabled>Live</button>
+      </nav>
+      <div class="top-actions">
+        <span id="connectionStatus" class="status-pill status-idle">Static model</span>
+        <button class="ghost-button" id="fitButton" type="button" title="Fit network to view">Fit</button>
+        <button class="ghost-button" id="helpButton" type="button" title="How to use">Help</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="panel left-panel">
+        <section class="panel-section" id="modelSection">
+          <div class="section-heading">
+            <h2>Model</h2>
+            <span id="modelStatus" class="section-note">--</span>
+          </div>
+          <select id="modelSelect" aria-label="Model snapshot"></select>
+          <div class="button-row">
+            <label class="file-button">
+              Load JSON
+              <input type="file" id="modelFile" accept="application/json,.json" />
+            </label>
+            <button id="validateButton" class="ghost-button small" type="button">Check</button>
+          </div>
+          <div id="modelMeta" class="meta-grid"></div>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-heading">
+            <h2>Observations</h2>
+            <span id="inputMode" class="section-note">Editable</span>
+          </div>
+          <div id="inputControls" class="input-list"></div>
+          <div class="preset-label">Presets</div>
+          <div id="presets" class="preset-grid"></div>
+        </section>
+      </aside>
+
+      <section class="center-panel">
+        <div class="network-card">
+          <div class="network-toolbar">
+            <div id="networkTabs" class="network-tabs" role="tablist"></div>
+            <div class="render-controls">
+              <label class="range-control">
+                Top inputs per neuron
+                <input id="topKInput" type="range" min="1" max="8" step="1" value="3" />
+                <output id="topKOutput">3</output>
+              </label>
+              <label class="range-control">
+                Min edge strength
+                <input id="thresholdInput" type="range" min="0" max="100" step="1" value="0" />
+                <output id="thresholdOutput">0%</output>
+              </label>
+              <span id="edgeCount" class="edge-count">0 edges</span>
+            </div>
+          </div>
+
+          <div id="liveBar" class="live-bar hidden">
+            <label class="live-mode">
+              Drive mode
+              <select id="driveMode">
+                <option value="baseline">Baseline autopilot</option>
+                <option value="actor">Actor policy</option>
+                <option value="manual">Manual keyboard</option>
+              </select>
+            </label>
+            <button id="pauseButton" class="tool-button" type="button">Pause</button>
+            <button id="stepButton" class="tool-button" type="button" disabled>Step</button>
+            <button id="resetButton" class="tool-button" type="button">Reset</button>
+            <span id="liveMeta" class="live-meta"></span>
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas id="networkCanvas" aria-label="Neural network activation graph"></canvas>
+            <div class="canvas-overlay hidden" id="emptyOverlay">
+              <h2>No model loaded yet</h2>
+              <p>Generate an untrained snapshot and serve the visualizer:</p>
+              <code>.venv/bin/python scripts/export_visualizer.py --seed 0</code>
+              <code>.venv/bin/python scripts/visualizer_server.py</code>
+            </div>
+            <div class="canvas-message hidden" id="canvasMessage"></div>
+            <div class="legend">
+              <span><i class="swatch positive"></i>positive flow</span>
+              <span><i class="swatch negative"></i>negative flow</span>
+              <span><i class="swatch activation"></i>activation</span>
+              <span class="legend-hint">scroll to zoom · drag to pan · click to inspect</span>
+            </div>
+            <div id="tooltip" class="tooltip hidden"></div>
+            <div id="manualHint" class="manual-hint hidden">
+              <strong>Manual drive</strong>
+              <span>A / D steer left / right · W / S throttle and brake</span>
+            </div>
+          </div>
+
+          <div id="actionBar" class="action-bar"></div>
+        </div>
+      </section>
+
+      <aside class="panel right-panel">
+        <section class="panel-section">
+          <div class="section-heading">
+            <h2>Inspector</h2>
+            <span id="selectionTag" class="section-note">Network</span>
+          </div>
+          <div id="inspector" class="inspector"></div>
+        </section>
+        <section id="telemetrySection" class="panel-section hidden">
+          <div class="section-heading">
+            <h2>Live telemetry</h2>
+            <span id="episodeTag" class="section-note"></span>
+          </div>
+          <div id="telemetry" class="telemetry"></div>
+        </section>
+      </aside>
+    </main>
+
+    <dialog id="helpDialog" class="help-dialog">
+      <div class="help-head">
+        <h2>How to use</h2>
+        <form method="dialog">
+          <button class="ghost-button small" type="submit">Close</button>
+        </form>
+      </div>
+      <div class="help-grid">
+        <section>
+          <h3>Explore</h3>
+          <p>Move the eight observation sliders and watch activations propagate through the selected network. Presets give useful driving states.</p>
+          <p>Scroll to zoom, drag to pan, double-click to fit. Click a neuron or connection for details.</p>
+          <p>For a static server without MetaDrive:</p>
+          <code>.venv/bin/python scripts/visualizer_server.py</code>
+        </section>
+        <section>
+          <h3>Live</h3>
+          <p>Start the simulator server:</p>
+          <code>.venv/bin/python scripts/visualizer_server.py --live --mode baseline</code>
+          <p>Then open <strong>http://127.0.0.1:8765/</strong> and use the Live tab. Pause, step, reset, or use WASD in manual mode.</p>
+          <p>Load trained weights by adding a checkpoint:</p>
+          <code>.venv/bin/python scripts/visualizer_server.py --live --checkpoint checkpoints/actor.pt</code>
+          <p>Saved changes hot-reload without restarting.</p>
+        </section>
+        <section>
+          <h3>Exports</h3>
+          <p>Rebuild the static snapshot after a checkpoint is available:</p>
+          <code>.venv/bin/python scripts/export_visualizer.py --checkpoint checkpoints/actor.pt --label "PPO 100k"</code>
+        </section>
+        <section>
+          <h3>Reading the graph</h3>
+          <p>Line thickness is the product of weight and source activation. Cyan is positive flow, orange is negative. Node brightness is activation strength.</p>
+        </section>
+      </div>
+    </dialog>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
