@@ -6,9 +6,8 @@ from typing import Sequence, Tuple
 
 import torch
 import torch.nn as nn
-from torch.distributions import Normal, TransformedDistribution
-from torch.distributions.transforms import TanhTransform
 
+from algorithms.distributions import SquashedGaussian
 from agent.networks.layers import NeuralNetLayers
 
 
@@ -63,14 +62,14 @@ class Actor(nn.Module):
         self._validate_observations(observations)
         return self.mean_network(observations)
 
-    def distribution(self, observations: torch.Tensor) -> TransformedDistribution:
+    def distribution(self, observations: torch.Tensor) -> SquashedGaussian:
         """Return a tanh-transformed diagonal Gaussian with actions in (-1, 1)."""
         means = self(observations)
-        log_std = self.log_std.clamp(self.min_log_std, self.max_log_std)
-        base_distribution = Normal(means, log_std.exp().expand_as(means))
-        return TransformedDistribution(
-            base_distribution,
-            [TanhTransform(cache_size=1)],
+        return SquashedGaussian(
+            mean=means,
+            log_std=self.log_std,
+            min_log_std=self.min_log_std,
+            max_log_std=self.max_log_std,
         )
 
     def sample_action(
@@ -79,13 +78,7 @@ class Actor(nn.Module):
         deterministic: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample (or select the mean action) and return its corrected log probability."""
-        distribution = self.distribution(observations)
-        if deterministic:
-            actions = torch.tanh(self(observations))
-        else:
-            actions = distribution.rsample()
-        log_probabilities = distribution.log_prob(actions).sum(dim=-1)
-        return actions, log_probabilities
+        return self.distribution(observations).sample(deterministic=deterministic)
 
     def evaluate_actions(
         self,
@@ -93,17 +86,7 @@ class Actor(nn.Module):
         actions: torch.Tensor,
     ) -> torch.Tensor:
         """Evaluate stored bounded actions, summing log probabilities by action dimension."""
-        distribution = self.distribution(observations)
-        if actions.shape[-1:] != (self.action_dim,):
-            raise ValueError(
-                f"Expected actions with final dimension {self.action_dim}, "
-                f"got shape {tuple(actions.shape)}."
-            )
-        if not torch.is_floating_point(actions):
-            raise TypeError("actions must have a floating-point dtype.")
-        epsilon = torch.finfo(actions.dtype).eps
-        bounded_actions = actions.clamp(-1.0 + epsilon, 1.0 - epsilon)
-        return distribution.log_prob(bounded_actions).sum(dim=-1)
+        return self.distribution(observations).log_prob(actions)
 
     def _validate_observations(self, observations: torch.Tensor) -> None:
         if not isinstance(observations, torch.Tensor):
